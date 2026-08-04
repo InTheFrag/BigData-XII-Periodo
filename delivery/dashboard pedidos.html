@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Balance de saturación · Delivery en tiempo real</title>
+<style>
+  :root{
+    --bg: #2d3250;
+    --panel: #424769;
+    --panel-2: #676f9d;
+    --line: #ffffff;
+    --text: #ffffff;
+    --text-dim: #f9b17a;
+    --ok: #3AA76D;
+    --warn: #F0A23B;
+    --crit: #E2498A;
+    --ok-dim: #D9F3E4;
+    --warn-dim: #FCE5C0;
+    --crit-dim: #F8C3D9;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:linear-gradient(180deg, #23293f 0%, var(--bg) 100%); color:var(--text);
+    font-family:'Times New Roman', Georgia, serif;
+    padding:32px 24px 60px;
+  }
+  body, .eyebrow, .zone-tab, .gauge-label, .status-pill, .stat-name, .stat-value, .grid-title, .etl-stage-label, .etl-stage-value, .etl-stage-sub, .pedidos-table, .pedidos-table th, .pedidos-table td, .zone-card-name, .zone-card-nums, .footer-note, h1, .sub {
+    font-family:'Times New Roman', Georgia, serif;
+  }
+  .wrap{max-width:960px; margin:0 auto;}
+  .eyebrow{
+    font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:0.12em;
+    color:var(--text-dim); text-transform:uppercase; margin:0 0 6px;
+  }
+  h1{font-size:24px; font-weight:700; margin:0 0 4px; letter-spacing:-0.01em;}
+  .sub{color:var(--text-dim); font-size:13px; margin:0 0 28px;}
+
+  .zone-tabs{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:24px;}
+  .zone-tab{
+    font-family:'JetBrains Mono', monospace; font-size:12px; padding:8px 14px;
+    background:var(--panel); border:1px solid var(--line); border-radius:6px;
+    color:var(--text-dim); cursor:pointer; transition:border-color .15s, color .15s;
+  }
+  .zone-tab:hover{color:var(--text); border-color:#3a424b;}
+  .zone-tab.active{color:var(--bg); background:var(--text); border-color:var(--text); font-weight:500;}
+
+  .main-panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:28px; display:grid; grid-template-columns:200px 1fr; gap:32px; margin-bottom:20px;
+  }
+  .gauge-col{display:flex; flex-direction:column; align-items:center; justify-content:center;}
+  .gauge-label{font-family:'JetBrains Mono', monospace; font-size:11px; color:var(--text-dim); margin-top:10px; text-align:center;}
+  .status-pill{
+    font-family:'JetBrains Mono', monospace; font-size:11px; font-weight:500; padding:4px 10px;
+    border-radius:100px; margin-top:8px; letter-spacing:0.03em;
+  }
+  .stats-col{display:flex; flex-direction:column; justify-content:center; gap:18px;}
+  .stat-row{display:flex; justify-content:space-between; align-items:baseline; border-bottom:1px solid var(--line); padding-bottom:14px;}
+  .stat-row:last-child{border-bottom:none; padding-bottom:0;}
+  .stat-name{font-size:13px; color:var(--text-dim);}
+  .stat-value{font-family:'JetBrains Mono', monospace; font-size:22px; font-weight:700;}
+  .stat-value.small{font-size:15px; font-weight:500;}
+
+  .grid-title{font-size:12px; color:var(--text-dim); font-family:'JetBrains Mono', monospace; margin:24px 0 10px; letter-spacing:0.06em;}
+  .zone-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px;}
+
+  .etl-panel{display:flex; align-items:center; gap:12px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:20px;}
+  .etl-stage{flex:1; text-align:center;}
+  .etl-stage-label{font-family:'JetBrains Mono', monospace; font-size:10px; color:var(--text-dim); letter-spacing:0.1em; margin-bottom:8px;}
+  .etl-stage-value{font-family:'JetBrains Mono', monospace; font-size:26px; font-weight:700; color:var(--text);}
+  .etl-stage-value.small{font-size:16px; margin-top:6px;}
+  .etl-stage-value.ok{color:var(--ok);}
+  .etl-stage-value.warn{color:var(--warn);}
+  .etl-stage-value.crit{color:var(--crit);}
+  .etl-stage-sub{font-size:10px; color:var(--text-dim); margin-top:2px;}
+  .etl-arrow{font-size:20px; color:var(--text-dim);}
+
+  .pedidos-panel{background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden;}
+  .pedidos-table{width:100%; border-collapse:collapse; font-family:'JetBrains Mono', monospace; font-size:12px;}
+  .pedidos-table th{
+    text-align:left; padding:10px 14px; color:var(--text-dim); font-weight:500;
+    font-size:10px; letter-spacing:0.05em; text-transform:uppercase;
+    background:var(--panel-2); border-bottom:1px solid var(--line);
+  }
+  .pedidos-table td{padding:9px 14px; border-bottom:1px solid var(--line); color:var(--text);}
+  .pedidos-table tbody tr:last-child td{border-bottom:none;}
+  .pedidos-table tbody tr:hover{background:var(--panel-2);}
+  .pedidos-id{color:var(--text-dim);}
+  .pedidos-empty{text-align:center; color:var(--text-dim); padding:20px !important;}
+  .zone-card{
+    background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px;
+    cursor:pointer; transition:border-color .15s; position:relative;
+  }
+  .zone-card:hover{border-color:#3a424b;}
+  .zone-card.selected{border-color:var(--text);}
+  .zone-card-name{font-size:13px; font-weight:500; margin-bottom:10px;}
+  .zone-card-bar{height:6px; background:var(--panel-2); border-radius:3px; overflow:hidden; margin-bottom:8px;}
+  .zone-card-fill{height:100%; border-radius:3px; transition:width .6s ease;}
+  .zone-card-nums{display:flex; justify-content:space-between; font-family:'JetBrains Mono', monospace; font-size:11px; color:var(--text-dim);}
+
+  .footer-note{font-family:'JetBrains Mono', monospace; font-size:11px; color:var(--text-dim); margin-top:24px; display:flex; justify-content:space-between;}
+  .pulse{display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--ok); margin-right:6px; animation:pulse 2s infinite;}
+  @media (prefers-reduced-motion: reduce){ .pulse{animation:none;} }
+  @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:.3;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Balance de saturación por zona</h1>
+  <p class="sub">Pedidos activos frente a capacidad de cocineros disponibles · datos de prueba, se actualizan cada 3s</p>
+
+  <div class="zone-tabs" id="zoneTabs"></div>
+
+  <div class="main-panel">
+    <div class="gauge-col">
+      <svg width="160" height="160" viewBox="0 0 160 160">
+        <circle cx="80" cy="80" r="66" fill="none" stroke="#1D232A" stroke-width="14"/>
+        <circle id="gaugeArc" cx="80" cy="80" r="66" fill="none" stroke="var(--ok)" stroke-width="14"
+          stroke-linecap="round" stroke-dasharray="414.7" stroke-dashoffset="414.7"
+          transform="rotate(-90 80 80)" style="transition: stroke-dashoffset .6s ease, stroke .6s ease;"/>
+        <text id="gaugePct" x="80" y="86" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="28" font-weight="700" fill="#E8ECEF">0%</text>
+      </svg>
+      <div class="gauge-label" id="zoneName">—</div>
+      <div class="status-pill" id="statusPill">—</div>
+    </div>
+    <div class="stats-col">
+      <div class="stat-row">
+        <span class="stat-name">Pedidos activos</span>
+        <span class="stat-value" id="statPedidos">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-name">Cocineros disponibles</span>
+        <span class="stat-value" id="statCocineros">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-name">Ratio pedidos / cocinero</span>
+        <span class="stat-value small" id="statRatio">0.0</span>
+      </div>
+    </div>
+  </div>
+
+  <p class="grid-title">Todas las zonas</p>
+  <div class="zone-grid" id="zoneGrid"></div>
+
+  <p class="grid-title">Pedidos recientes · <span id="pedidosZonaLabel">—</span></p>
+  <div class="pedidos-panel">
+    <table class="pedidos-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Restaurante</th>
+          <th>Monto</th>
+          <th>Items</th>
+          <th>Hora</th>
+        </tr>
+      </thead>
+      <tbody id="pedidosBody">
+        <tr><td colspan="5" class="pedidos-empty">Cargando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="grid-title">Pipeline ETL en vivo</p>
+  <div class="etl-panel">
+    <div class="etl-stage">
+      <div class="etl-stage-label">EXTRACT</div>
+      <div class="etl-stage-value" id="etlExtraidos">0</div>
+      <div class="etl-stage-sub">leídos de Kafka</div>
+    </div>
+    <div class="etl-arrow">→</div>
+    <div class="etl-stage">
+      <div class="etl-stage-label">TRANSFORM</div>
+      <div class="etl-stage-value ok" id="etlTransformOk">0</div>
+      <div class="etl-stage-sub">válidos</div>
+      <div class="etl-stage-value crit small" id="etlTransformDescartados">0</div>
+      <div class="etl-stage-sub">descartados</div>
+    </div>
+    <div class="etl-arrow">→</div>
+    <div class="etl-stage">
+      <div class="etl-stage-label">LOAD</div>
+      <div class="etl-stage-value ok" id="etlCargados">0</div>
+      <div class="etl-stage-sub">nuevos en Mongo</div>
+      <div class="etl-stage-value warn small" id="etlDuplicados">0</div>
+      <div class="etl-stage-sub">duplicados evitados</div>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    <span><span class="pulse"></span><span id="connNote">Conectando...</span> · última actualización: <span id="lastUpdate">--:--:--</span></span>
+    <span>Umbral crítico: ratio > 1.4</span>
+  </div>
+</div>
+
+<script>
+const API_BASE = 'http://localhost:8001';
+
+const zones = [
+  {id:'juticalpa', name:'Juticalpa'},
+  {id:'catacamas', name:'Catacamas'},
+];
+
+let selected = 'juticalpa';
+let state = {};
+let conectado = false;
+
+function initState(){
+  zones.forEach(z=>{
+    state[z.id] = { pedidos: 0, cocineros: 1 };
+  });
+}
+
+async function fetchBalance(){
+  try{
+    const res = await fetch(`${API_BASE}/balance`);
+    const data = await res.json();
+    data.zonas.forEach(z=>{
+      state[z.zona] = { pedidos: z.pedidos_activos, cocineros: z.cocineros_disponibles };
+    });
+    conectado = true;
+  }catch(e){
+    conectado = false;
+  }
+}
+
+async function fetchEtl(){
+  try{
+    const res = await fetch(`${API_BASE}/etl`);
+    const data = await res.json();
+    document.getElementById('etlExtraidos').textContent = data.extraidos ?? 0;
+    document.getElementById('etlTransformOk').textContent = data.transformados_ok ?? 0;
+    document.getElementById('etlTransformDescartados').textContent = data.transformados_descartados ?? 0;
+    document.getElementById('etlCargados').textContent = data.cargados ?? 0;
+    document.getElementById('etlDuplicados').textContent = data.duplicados ?? 0;
+  }catch(e){
+    // si falla, se queda con el ultimo valor conocido
+  }
+}
+
+async function fetchPedidos(){
+  try{
+    const res = await fetch(`${API_BASE}/pedidos?zona=${selected}&limite=15`);
+    const data = await res.json();
+    renderPedidos(data.pedidos || []);
+  }catch(e){
+    renderPedidos(null);
+  }
+}
+
+function renderPedidos(pedidos){
+  document.getElementById('pedidosZonaLabel').textContent = zones.find(z=>z.id===selected)?.name || selected;
+  const body = document.getElementById('pedidosBody');
+
+  if(pedidos === null){
+    body.innerHTML = '<tr><td colspan="5" class="pedidos-empty">Sin conexión a la API</td></tr>';
+    return;
+  }
+  if(pedidos.length === 0){
+    body.innerHTML = '<tr><td colspan="5" class="pedidos-empty">Sin pedidos todavía en esta zona</td></tr>';
+    return;
+  }
+
+  body.innerHTML = pedidos.map(p => {
+    const hora = p.timestamp ? new Date(p.timestamp).toLocaleTimeString('es-HN') : '—';
+    const idCorto = (p.id_pedido || '').slice(0, 8);
+    const monto = typeof p.monto === 'number' ? `L. ${p.monto.toFixed(2)}` : String(p.monto);
+    return `<tr>
+      <td class="pedidos-id">${idCorto}…</td>
+      <td>${p.restaurante ?? '—'}</td>
+      <td>${monto}</td>
+      <td>${p.cantidad_items ?? '—'}</td>
+      <td>${hora}</td>
+    </tr>`;
+  }).join('');
+}
+
+function statusFor(ratio){
+  if(ratio > 1.4) return {label:'CRÍTICO', color:'var(--crit)'};
+  if(ratio > 0.9) return {label:'SATURANDO', color:'var(--warn)'};
+  return {label:'ESTABLE', color:'var(--ok)'};
+}
+
+function render(){
+  const s = state[selected];
+  const ratio = s.cocineros > 0 ? s.pedidos / s.cocineros : 0;
+  const status = statusFor(ratio);
+  const pct = Math.min(ratio / 2, 1);
+
+  document.getElementById('zoneName').textContent = zones.find(z=>z.id===selected).name;
+  document.getElementById('statPedidos').textContent = s.pedidos;
+  document.getElementById('statCocineros').textContent = s.cocineros;
+  document.getElementById('statRatio').textContent = ratio.toFixed(2);
+
+  const pill = document.getElementById('statusPill');
+  pill.textContent = status.label;
+  pill.style.color = status.color;
+  pill.style.background = status.color.replace('var(--ok)','var(--ok-dim)').replace('var(--warn)','var(--warn-dim)').replace('var(--crit)','var(--crit-dim)');
+  if(status.label==='CRÍTICO') pill.style.background = 'var(--crit-dim)';
+  if(status.label==='SATURANDO') pill.style.background = 'var(--warn-dim)';
+  if(status.label==='ESTABLE') pill.style.background = 'var(--ok-dim)';
+
+  const arc = document.getElementById('gaugeArc');
+  const circumference = 414.7;
+  arc.style.stroke = status.color;
+  arc.style.strokeDashoffset = circumference - (pct * circumference);
+  document.getElementById('gaugePct').textContent = Math.round(ratio*100) + '%';
+
+  document.querySelectorAll('.zone-tab').forEach(t=>{
+    t.classList.toggle('active', t.dataset.zone === selected);
+  });
+
+  renderGrid();
+  document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('es-HN');
+}
+
+function renderGrid(){
+  const grid = document.getElementById('zoneGrid');
+  grid.innerHTML = '';
+  zones.forEach(z=>{
+    const s = state[z.id];
+    const ratio = s.cocineros > 0 ? s.pedidos / s.cocineros : 0;
+    const status = statusFor(ratio);
+    const pct = Math.min(ratio/2,1) * 100;
+    const card = document.createElement('div');
+    card.className = 'zone-card' + (z.id===selected ? ' selected' : '');
+    card.onclick = () => { selected = z.id; fetchPedidos().then(render); };
+    card.innerHTML = `
+      <div class="zone-card-name">${z.name}</div>
+      <div class="zone-card-bar"><div class="zone-card-fill" style="width:${pct}%; background:${status.color}"></div></div>
+      <div class="zone-card-nums"><span>${s.pedidos} pedidos</span><span>${s.cocineros} cocineros</span></div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function buildTabs(){
+  const tabs = document.getElementById('zoneTabs');
+  zones.forEach(z=>{
+    const btn = document.createElement('div');
+    btn.className = 'zone-tab';
+    btn.dataset.zone = z.id;
+    btn.textContent = z.name;
+    btn.onclick = () => { selected = z.id; fetchPedidos().then(render); };
+    tabs.appendChild(btn);
+  });
+}
+
+async function tick(){
+  await fetchBalance();
+  await fetchEtl();
+  await fetchPedidos();
+  render();
+  const note = document.getElementById('connNote');
+  if(note){
+    note.textContent = conectado ? 'Conectado a la API (datos reales)' : 'Sin conexión a la API · verifica que api.py esté corriendo en :8001';
+    note.style.color = conectado ? 'var(--ok)' : 'var(--crit)';
+  }
+}
+
+initState();
+buildTabs();
+tick();
+setInterval(tick, 3000);
+</script>
+</body>
+</html>
